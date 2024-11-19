@@ -1,21 +1,59 @@
-#include <Python.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+#define INPUT_DIR "input"
+#define OUTPUT_DIR "output"
+#define MODULES_COUNT 3
+const char *MODULES[] = {"text", "image", "video"};
+
+void create_output_folder(char *output_folder) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(output_folder, 100, OUTPUT_DIR "/%Y%m%d_%H%M%S", t);
+    mkdir(output_folder, 0755);
+}
+
+void process_file(const char *file_name, const char *output_folder) {
+    char command[512];
+
+    for (int i = 0; i < MODULES_COUNT; i++) {
+        snprintf(command, sizeof(command),
+                 "python3 modules/%s.py %s/%s %s",
+                 MODULES[i], INPUT_DIR, file_name, output_folder);
+        printf("Running: %s\n", command);
+        int ret = system(command);
+        if (ret != 0) {
+            fprintf(stderr, "Error in %s module for file %s\n", MODULES[i], file_name);
+        }
+    }
+}
 
 int main() {
-    // Python 인터프리터 초기화
-    Py_Initialize();
+    DIR *dir;
+    struct dirent *entry;
 
-    // Python 모듈 'openai.py'가 있는 경로를 추가
-    PyRun_SimpleString("import sys\n"
-                       "sys.path.append('./modules')");
+    dir = opendir(INPUT_DIR);
+    if (dir == NULL) {
+        perror("Input directory not found");
+        return 1;
+    }
 
-    // Python 스크립트 'openai.py' 불러오기
-    PyRun_SimpleString("import openai");
+    char output_folder[100];
+    create_output_folder(output_folder);
+    printf("Output folder created: %s\n", output_folder);
 
-    // 추가적인 Python 코드 실행 (예: openai 모듈의 함수 호출)
-    PyRun_SimpleString("openai.some_function()");
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) { // Regular file
+            printf("Processing file: %s\n", entry->d_name);
+            process_file(entry->d_name, output_folder);
+        }
+    }
 
-    // Python 인터프리터 종료
-    Py_Finalize();
-
+    closedir(dir);
+    printf("Analysis completed. Results saved in %s\n", output_folder);
     return 0;
 }
