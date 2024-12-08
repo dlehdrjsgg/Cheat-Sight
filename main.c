@@ -8,78 +8,72 @@
 #define MAX_PATH 512
 const char *MODULES[] = {"Text", "Diagram", "Image"};
 
-char output_dir[512]= "FLAG{i_want_to_go_home}";
-char *selected_file = NULL;      // 파일 선택 경로
-GList *selected_modules = NULL;  // 선택된 모듈 목록
-GtkWidget *text_view;            // 텍스트 출력 뷰
-GtkWidget *analyze_button;       // 분석 시작 버튼
-GtkWidget *file_button;       // 파일 선택 버튼
-GtkWidget *check_button1, *check_button2, *check_button3; 
+typedef struct {
+    char output_dir[MAX_PATH];
+    char *selected_file;         // 파일 선택 경로
+    GList *selected_modules;     // 선택된 모듈 목록
+    GtkWidget *text_view;        // 텍스트 출력 뷰
+    GtkWidget *analyze_button;   // 분석 시작 버튼
+    GtkWidget *file_button;      // 파일 선택 버튼
+    GtkWidget *check_button1;    // 체크박스 1
+    GtkWidget *check_button2;    // 체크박스 2
+    GtkWidget *check_button3;    // 체크박스 3
+} AppData;
 
+// 함수 선언
+void append_to_text_view(AppData *app, const char *message);
+void open_file_dialog(GtkWidget *widget, gpointer user_data);
+void on_analyze_button_clicked(GtkWidget *widget, gpointer user_data);
 void on_analysis_start(GtkWidget *widget, gpointer data);
-void process_file(const char *file, int option1, int option2, int option3);
-void on_download_button_clicked(GtkWidget *widget, gpointer user_data);
-void on_result_view_button_clicked();
+void process_file(AppData *app, const char *file, int option1, int option2, int option3);
 
-// UI 업데이트 함수
-void append_to_text_view(const char *message) {
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+// 텍스트 뷰에 메시지 추가
+void append_to_text_view(AppData *app, const char *message) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->text_view));
     gtk_text_buffer_insert_at_cursor(buffer, message, -1);
 }
 
 // 명령 실행 함수
-void execute_command(const char *command) {
+void execute_command(AppData *app, const char *command) {
     FILE *pipe = popen(command, "r");
     if (!pipe) {
-        append_to_text_view("[오류] 명령 실행 실패\n");
+        append_to_text_view(app, "[오류] 명령 실행 실패\n");
         return;
     }
 
     char output[512];
     while (fgets(output, sizeof(output), pipe)) {
-        append_to_text_view(output);
+        append_to_text_view(app, output);
     }
 
     int status = pclose(pipe);
     if (status != 0) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "[오류] 명령 실행 중 상태 코드 %d 반환\n", WEXITSTATUS(status));
-        append_to_text_view(error_msg);
+        append_to_text_view(app, error_msg);
     }
 }
 
 // 파일 선택 함수
-void open_file_dialog(GtkWidget *widget, gpointer data) {
+void open_file_dialog(GtkWidget *widget, gpointer user_data) {
+    AppData *app = (AppData *)user_data;
     GtkWidget *dialog = gtk_file_chooser_dialog_new(
-        "파일 선택",
-        GTK_WINDOW(data),
-        GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_취소", GTK_RESPONSE_CANCEL,
-        "_열기", GTK_RESPONSE_ACCEPT,
-        NULL);
+        "파일 선택", GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_FILE_CHOOSER_ACTION_OPEN, "_취소", GTK_RESPONSE_CANCEL, "_열기", GTK_RESPONSE_ACCEPT, NULL);
 
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-        if (selected_file) {
-            g_free(selected_file);
+        if (app->selected_file) {
+            g_free(app->selected_file);
         }
-        selected_file = gtk_file_chooser_get_filename(chooser);
+        app->selected_file = gtk_file_chooser_get_filename(chooser);
 
         char message[512];
-        snprintf(message, sizeof(message), "분석 파일: %s\n", selected_file);
+        snprintf(message, sizeof(message), "분석 파일: %s\n", app->selected_file);
+        append_to_text_view(app, message);
 
-        GtkWidget *message_label = gtk_label_new(message);
-        GtkWidget *label_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-        gtk_box_set_homogeneous(GTK_BOX(label_box), TRUE);  
-        gtk_box_pack_start(GTK_BOX(label_box), message_label, TRUE, TRUE, 5);
-
-        GtkWidget *vbox = gtk_widget_get_parent(gtk_widget_get_parent(widget)); 
-        gtk_box_pack_start(GTK_BOX(vbox), label_box, FALSE, FALSE, 5);
-
-        append_to_text_view(message);
-
-        gtk_widget_set_sensitive(analyze_button, TRUE); // 분석 시작 버튼 활성화
-        gtk_widget_set_sensitive(file_button, FALSE); // 파일 선택 버튼 비활성화
+        gtk_widget_set_sensitive(app->analyze_button, TRUE);
+        gtk_widget_set_sensitive(app->file_button, FALSE);
     }
     gtk_widget_destroy(dialog);
 }
